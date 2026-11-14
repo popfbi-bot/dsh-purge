@@ -1,0 +1,66 @@
+{
+  "name": "dsh-h3-video",
+  "title": {
+    "en": "MiniMax H3 Video",
+    "zh": "MiniMax H3 视频工作台"
+  },
+  "description": {
+    "en": "Generate and collect reference-conditioned H3 videos, browse a local video library and play MP4 deliveries in chat.",
+    "zh": "H3 人物参考视频、私有视频库与对话原位播放，支持 480p / 768p 及可调时长。"
+  },
+  "author": "kingcharleslzy-ai",
+  "homepage": "https://github.com/kingcharleslzy-ai/dsh-h3-video#readme",
+  "repository": {
+    "url": "https://github.com/kingcharleslzy-ai/dsh-h3-video"
+  },
+  "versions": [
+    {
+      "version": "0.5.1",
+      "publishTimestamp": 1794409363,
+      "source": {
+        "type": "git",
+        "url": "https://github.com/kingcharleslzy-ai/dsh-h3-video",
+        "commit": "d155c10b559e27be6eef76a8827612ba8d6d4a13"
+      },
+      "engines": {
+        "dsh": ">=0.2.2-rc.1"
+      }
+    },
+    {
+      "version": "0.5.0",
+      "publishTimestamp": 1794150618,
+      "source": {
+        "type": "git",
+        "url": "https://github.com/kingcharleslzy-ai/dsh-h3-video",
+        "commit": "ab3b939b915a4f47048df3613cbce103ad2286c3"
+      },
+      "engines": {
+        "dsh": "0.2.2-rc.1"
+      }
+    },
+    {
+      "version": "0.4.0",
+      "publishTimestamp": 1794148658,
+      "source": {
+        "type": "git",
+        "url": "https://github.com/kingcharleslzy-ai/dsh-h3-video",
+        "commit": "1f3283086f7d682bd9b8c97d58455b7f538bf100"
+      },
+      "engines": {
+        "dsh": "0.2.2-rc.1"
+      }
+    },
+    {
+      "version": "0.3.0",
+      "publishTimestamp": 1794060470,
+      "source": {
+        "type": "git",
+        "url": "https://github.com/kingcharleslzy-ai/dsh-h3-video",
+        "commit": "641cc1ee51a7c3af403ed28f7f959ea4e027058d"
+      },
+      "engines": {
+        "dsh": "0.2.2-rc.1"
+      }
+    }
+  ]
+}

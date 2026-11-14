@@ -1,0 +1,116 @@
+name: Community release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+concurrency:
+  group: community-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  release:
+    needs: installer
+    if: github.repository == 'kingcharleslzy-ai/dsh-purge'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packages/purge-panel/package-lock.json
+      - run: npm ci --ignore-scripts --legacy-peer-deps
+      - run: npm --prefix packages/purge-panel ci --ignore-scripts --legacy-peer-deps
+      - run: npm test && npm run check:client && npm run test:ui
+      - run: npm run check:docs
+      - run: npm pack --ignore-scripts && node scripts/smoke.mjs
+      - run: npm --prefix packages/purge-panel test
+      - name: Build verified release assets
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          test "$GITHUB_REF_NAME" = "v$version"
+          test "$(head -n 1 release-notes.md)" = "# $version"
+          notes="docs/releases/$version.md"
+          test "$(head -n 1 "$notes")" = "# $version"
+          test "$(grep -cE '^# [0-9]+\.[0-9]+\.[0-9]+' "$notes")" = 1
+          test -n "$(tail -n +2 "$notes" | tr -d '[:space:]')"
+          test "$(node -p "require('./package.json').name")" = "dsh-purge-community"
+          npm pack --ignore-scripts
+          cp "dsh-purge-community-$version.tgz" dsh-purge-community.tgz
+          sha256sum "dsh-purge-community-$version.tgz" dsh-purge-community.tgz > SHA256SUMS.txt
+      - name: Publish community release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          gh release create "$GITHUB_REF_NAME" "dsh-purge-community-$version.tgz" dsh-purge-community.tgz SHA256SUMS.txt --verify-tag --title "dsh-purge Community $version" --notes-file "docs/releases/$version.md"
+
+  installer:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts --legacy-peer-deps
+      - name: Full test suite
+        if: runner.os != 'Windows'
+        run: npm test
+      - name: Full Windows suite with bounded process concurrency
+        if: runner.os == 'Windows'
+        run: npm test -- --test-concurrency=2
+      - name: Windows PowerShell 5.1 installer wrapper
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./test/install-windows.ps1
+      - name: PowerShell 7 installer wrapper
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./test/install-windows.ps1
+      - name: Real Windows Electron handoff lifecycle
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $runtime = Join-Path ([IO.Path]::GetTempPath()) 'purge-electron'
+          npm install --prefix $runtime --no-package-lock --no-audit --no-fund electron@44.7.0
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node (Join-Path $runtime 'node_modules/electron/install.js')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:PURGE_ELECTRON_EXEC = Join-Path $runtime 'node_modules/electron/dist/electron.exe'
+          if (-not (Test-Path -LiteralPath $env:PURGE_ELECTRON_EXEC)) { throw 'Electron binary was not installed' }
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-windows-job-handoff.ps1 -ElectronExe $env:PURGE_ELECTRON_EXEC -SourceRoot $PWD.Path
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test test/windows-electron-handoff.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:electron
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/check-update-runtime.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:ELECTRON_RUN_AS_NODE = '1'
+          $downloadLog = Join-Path $env:RUNNER_TEMP 'purge-download.log'
+          $downloadError = Join-Path $env:RUNNER_TEMP 'purge-download-error.log'
+          $p = Start-Process -FilePath $env:PURGE_ELECTRON_EXEC -ArgumentList 'scripts/check-bootstrap-download-runtime.mjs' -Wait -PassThru -NoNewWindow -RedirectStandardOutput $downloadLog -RedirectStandardError $downloadError
+          Get-Content $downloadLog,$downloadError
+          if ($p.ExitCode -ne 0) { exit $p.ExitCode }
+      - name: Real macOS Electron diagnostics and manual-quit handoff
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime="$RUNNER_TEMP/purge-electron"
+          npm install --prefix "$runtime" --no-package-lock --no-audit --no-fund electron@44.7.0
+          node "$runtime/node_modules/electron/install.js"
+          export PURGE_ELECTRON_EXEC="$runtime/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron"
+          npm run test:electron
+          node scripts/check-update-runtime.mjs
+          ELECTRON_RUN_AS_NODE=1 "$PURGE_ELECTRON_EXEC" scripts/check-bootstrap-download-runtime.mjs
+      - name: Real Linux root and service-user audit ownership
+        if: runner.os == 'Linux'
+        run: sudo "$(command -v node)" scripts/check-audit-ownership.mjs
+      - name: Verify packed artifact on each platform
+        run: npm pack --ignore-scripts && node scripts/smoke.mjs
